@@ -1,0 +1,58 @@
+# Define the iceberg order function
+def IcebergOrder(qty, limitPrice, visibleQty, maxVisibleQty):
+    # Define variables for tracking order quantity and visible quantity
+    def Qty = qty - visibleQty;
+    def VisQty = Min(maxVisibleQty, visibleQty);
+
+    # Submit the visible portion of the order
+    def OrderID = Order(BuySell, VisQty, limitPrice, OrderType.LIMIT, TimeInForce.DAY).OrderId;
+
+    # If there is still quantity remaining, submit the hidden portion of the order
+    if Qty > 0:
+        Order(BuySell, Qty, limitPrice, OrderType.LIMIT, TimeInForce.DAY, hidden = yes, icebergQty = Qty, icebergPrice = limitPrice, icebergMaxVisibleQty = maxVisibleQty - VisQty, parent = OrderID);
+
+# Long Entry Command
+input fastLength = 15;
+input slowLength = 13;
+input MACDLength = 2;
+input MACDLength2 = 2;
+input signalSmoothing = 16;
+input signalSmoothing2 = 3;
+input MACDDiffType = MovingAverageType.EXPONENTIAL;
+input showBreakoutSignals = yes;
+input data = close;
+def Value = MovingAverage(MACDDiffType, data, fastLength) - MovingAverage(MACDDiffType, data, slowLength);
+def Avg = MovingAverage(MACDDiffType, Value, MACDLength);
+def Diff = Value - Avg;
+def Value2 = MovingAverage(MACDDiffType, Diff, signalSmoothing);
+def Avg2 = MovingAverage(MACDDiffType, Value2, MACDLength2);
+def Diff2 = Value2 - Avg2;
+
+# Define order size and stop loss parameters
+input startYear = 2018;
+input startMonth = 1;
+input startDay = 1;
+input endYear = 3333;
+input endMonth = 12;
+input endDay = 31;
+def tradeStartDate = FirstTime(startYear, startMonth, startDay);
+def tradeEndDate = FirstTime(endYear, endMonth, endDay);
+def equity = GetValue(GetAccount("EQUITY"), 1);
+def orderSize = Max(1, Floor(0.1 * equity / close));
+def stopPrice = close * 0.97;
+
+# Submit the long entry order with iceberg strategy when order size is above 100
+def LongEntryOrder = if BuySignal and orderSize > 100 then IcebergOrder(orderSize, close, orderSize / 2, orderSize / 2) else Order(BuySell.BUY_TO_OPEN, orderSize, close, OrderType.LIMIT, TimeInForce.DAY);
+
+# Long Exit Command
+input ExitLength = 3;
+input ExitLength2 = 1;
+def Value3 = MovingAverage(MACDDiffType, data, ExitLength) - MovingAverage(MACDDiffType, data, ExitLength2);
+def Avg3 = MovingAverage(MACDDiffType, Value3, MACDLength);
+def Diff3 = Value3 - Avg3;
+
+# Submit the long exit order with iceberg strategy when order size is above 100
+def LongExitOrder = if SellSignal and orderSize > 100 then IcebergOrder(orderSize, stopPrice, orderSize / 2, orderSize / 2) else Order(BuySell.SELL_TO_CLOSE, orderSize, stopPrice, OrderType.STOP, TimeInForce.DAY);
+
+# Submit the long entry and exit orders
+AddOrder
